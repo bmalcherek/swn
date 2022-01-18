@@ -19,8 +19,8 @@ func main() {
 		})
 	}
 	for i := 0; i < nodeCount; i++ {
-		commChanSend := make(chan message.Message)
-		commChanRecv := make(chan message.Message)
+		commChanSend := make(chan message.Message, 100)
+		commChanRecv := make(chan message.Message, 100)
 		nodes[i].NextNodeSendChan = commChanSend
 		nodes[(i+1)%nodeCount].PrevNodeRecvChan = commChanSend
 		nodes[i].NextNodeRecvChan = commChanRecv

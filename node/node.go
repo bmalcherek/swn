@@ -2,23 +2,26 @@ package node
 
 import (
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/bmalcherek/swn/message"
 )
 
 const (
-	timeout = time.Second
+	timeout        = time.Second
+	ackFaultChance = 0.3
 )
 
 type Node struct {
-	NextNodeSendChan  chan<- message.Message
-	NextNodeRecvChan  <-chan message.Message
-	PrevNodeSendChan  chan<- message.Message
-	PrevNodeRecvChan  <-chan message.Message
-	NodeId            int
-	lastSendId        int
-	lastRecievedAckId int
+	NextNodeSendChan    chan<- message.Message
+	NextNodeRecvChan    <-chan message.Message
+	PrevNodeSendChan    chan<- message.Message
+	PrevNodeRecvChan    <-chan message.Message
+	NodeId              int
+	lastSendId          int
+	lastRecievedAckId   int
+	lastRecievedTokenId int
 }
 
 func (n *Node) Run() {
@@ -29,7 +32,7 @@ func (n *Node) Run() {
 	for {
 		select {
 		case msg := <-n.PrevNodeRecvChan:
-			n.handleTokenMessage(msg)
+			n.handlePrevNodeMessage(msg)
 		case msg := <-n.NextNodeRecvChan:
 			n.handleNextNodeMessage(msg)
 		}
@@ -37,17 +40,26 @@ func (n *Node) Run() {
 }
 
 func (n *Node) sendToken(id int) {
-	n.NextNodeSendChan <- message.Message{Type: message.Token, Id: id}
+	msg := message.Message{Type: message.Token, Id: id}
+	n.NextNodeSendChan <- msg
+	fmt.Printf("Node %d send token %v\n", n.NodeId, msg)
 	n.lastSendId = id
 	go n.checkForRecievedAck()
 }
 
-func (n *Node) handleTokenMessage(msg message.Message) {
+func (n *Node) handlePrevNodeMessage(msg message.Message) {
 	fmt.Printf("Node %d recieved msg %v\n", n.NodeId, msg)
-	// n.PrevNodeChan <- message.Message{Type: message.Ack, Id: msg.Id}
-	// time.Sleep(2 * time.Second)
-	msg.Id += 1
-	fmt.Println("XDDD")
+	if n.lastRecievedTokenId == msg.Id {
+		return
+	}
+	n.lastRecievedTokenId = msg.Id
+	if rand.Float32() < ackFaultChance {
+		fmt.Printf("Node %d ack channel failed\n", n.NodeId)
+		time.Sleep(6 * time.Second)
+	}
+	n.PrevNodeSendChan <- message.Message{Type: message.Ack, Id: msg.Id}
+	time.Sleep(2 * time.Second)
+	n.sendToken(msg.Id + 1)
 	// n.NextNodeChan <- msg
 	// n.lastSendId = msg.Id
 }
