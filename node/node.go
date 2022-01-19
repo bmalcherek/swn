@@ -9,10 +9,14 @@ import (
 )
 
 const (
-	timeout              = 1500 * time.Millisecond
-	recvTokenFaultChance = 0.2
-	ackFaultChance       = 0.2
-	nodeCount            = 3
+	timeout                     = 1500 * time.Millisecond
+	prevNodeSendChanFaultChance = 0.2
+	prevNodeRecvChanFaultChance = 0.2
+	nextNodeSendChanFaultChance = 0.2
+	nextNodeRecvChanFaultChance = 0.2
+	recvTokenFaultChance        = 0.2
+	ackFaultChance              = 0.2
+	nodeCount                   = 3
 )
 
 type Node struct {
@@ -36,6 +40,10 @@ func (n *Node) Run() {
 	for {
 		select {
 		case msg := <-n.PrevNodeRecvChan:
+			if rand.Float32() < prevNodeRecvChanFaultChance {
+				log.Printf("NODE %d PREV NODE RECV CHAN FAULT\n", n.NodeId)
+				time.Sleep(time.Duration(rand.Intn(10)+1) * time.Second)
+			}
 			n.handlePrevNodeMessage(msg)
 		case msg := <-n.NextNodeRecvChan:
 			n.handleNextNodeMessage(msg)
@@ -76,14 +84,16 @@ func (n *Node) sendRecoveryAck(id int) {
 }
 
 func (n *Node) handlePrevNodeMessage(msg message.Message) {
-	if msg.Type == message.Token && false {
+	if msg.Type == message.Token && rand.Float32() > recvTokenFaultChance {
 		if n.lastRecievedTokenId == msg.Id {
 			return
 		}
 		log.Printf("Node %d recieved token %v\n", n.NodeId, msg)
-		n.lastRecievedTokenId = msg.Id
 		n.sendAck(msg.Id)
-		n.enterCriticalRegion(msg.Id)
+		if n.lastRecievedTokenId < msg.Id {
+			n.lastRecievedTokenId = msg.Id
+			n.enterCriticalRegion(msg.Id)
+		}
 	} else if msg.Type == message.RecoveryAck {
 		log.Printf("Node %d recieved recovery ack %v\n", n.NodeId, msg)
 		n.lastRecievedRecoveryAckId = msg.Id
@@ -100,7 +110,10 @@ func (n *Node) handleNextNodeMessage(msg message.Message) {
 			n.sendRecoveryToken(msg.Id, msg.Target)
 			return
 		}
-		n.enterCriticalRegion(msg.Id)
+		if n.lastRecievedTokenId < msg.Id {
+			n.lastRecievedTokenId = msg.Id
+			n.enterCriticalRegion(msg.Id)
+		}
 	}
 }
 
