@@ -10,12 +10,8 @@ import (
 
 const (
 	timeout                     = 1500 * time.Millisecond
-	prevNodeSendChanFaultChance = 0.2
 	prevNodeRecvChanFaultChance = 0.2
-	nextNodeSendChanFaultChance = 0.2
 	nextNodeRecvChanFaultChance = 0.2
-	recvTokenFaultChance        = 0.2
-	ackFaultChance              = 0.2
 	nodeCount                   = 3
 )
 
@@ -46,6 +42,10 @@ func (n *Node) Run() {
 			}
 			n.handlePrevNodeMessage(msg)
 		case msg := <-n.NextNodeRecvChan:
+			if rand.Float32() < nextNodeRecvChanFaultChance {
+				log.Printf("NODE %d NEXT NODE RECV CHAN FAULT\n", n.NodeId)
+				time.Sleep(time.Duration(rand.Intn(10)+1) * time.Second)
+			}
 			n.handleNextNodeMessage(msg)
 		}
 	}
@@ -60,10 +60,6 @@ func (n *Node) sendToken(id int) {
 }
 
 func (n *Node) sendAck(id int) {
-	if rand.Float32() < ackFaultChance {
-		log.Printf("Node %d ack channel failed\n", n.NodeId)
-		time.Sleep(6 * time.Second)
-	}
 	msg := message.Message{Type: message.Ack, Id: id}
 	n.PrevNodeSendChan <- msg
 	log.Printf("Node %d sent ack %v\n", n.NodeId, msg)
@@ -84,7 +80,7 @@ func (n *Node) sendRecoveryAck(id int) {
 }
 
 func (n *Node) handlePrevNodeMessage(msg message.Message) {
-	if msg.Type == message.Token && rand.Float32() > recvTokenFaultChance {
+	if msg.Type == message.Token {
 		if n.lastRecievedTokenId == msg.Id {
 			return
 		}
@@ -137,7 +133,7 @@ func (n *Node) checkForRecievedAck() {
 func (n *Node) checkForRecievedRecoveryAck(target int) {
 	time.Sleep(timeout)
 	if n.lastSentRecoveryTokenId > n.lastRecievedRecoveryAckId {
-		log.Printf("Node %d didn't recieve recovery ack for %d, %v\n", n.NodeId, n.lastSentId, n.NextNodeSendChan)
+		log.Printf("Node %d didn't recieve recovery ack for %d\n", n.NodeId, n.lastSentId)
 		n.sendRecoveryToken(n.lastSentRecoveryTokenId, target)
 	}
 }
